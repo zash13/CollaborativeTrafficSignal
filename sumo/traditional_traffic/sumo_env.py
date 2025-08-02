@@ -1,10 +1,9 @@
-import gym
 import numpy as np
 import traci
 import os
 import sys
 from plexe import Plexe, ACC, CACC
-from utils import communicate
+from sumo.traditional_traffic.utils import communicate
 
 if "SUMO_HOME" in os.environ:
     tools = os.path.join(os.environ["SUMO_HOME"], "tools")
@@ -29,7 +28,7 @@ def add_single_platoon(plexe, topology, step, lane):
     import random
 
     for i in range(PLATOON_SIZE):
-        vid = "v.%d.%d.%d" % (step / ADD_PLATOON_STEP, lane, i)
+        vid = "v.%d.%d.%d" % (step // ADD_PLATOON_STEP, lane, i)
         routeID = "route_%d" % lane
         traci.vehicle.add(
             vid,
@@ -53,8 +52,8 @@ def add_single_platoon(plexe, topology, step, lane):
             plexe.set_active_controller(vid, CACC)
             traci.vehicle.setColor(vid, (200, 200, 0, 255))
             topology[vid] = {
-                "front": "v.%d.%d.%d" % (step / ADD_PLATOON_STEP, lane, i - 1),
-                "leader": "v.%d.%d.0" % (step / ADD_PLATOON_STEP, lane),
+                "front": "v.%d.%d.%d" % (step // ADD_PLATOON_STEP, lane, i - 1),
+                "leader": "v.%d.%d.0" % (step // ADD_PLATOON_STEP, lane),
             }
 
 
@@ -66,25 +65,49 @@ def add_platoons(plexe, topology, step):
             add_single_platoon(plexe, topology, step, lane)
 
 
-class SumoEnv(gym.Env):
+class SumoEnvironment:
     def __init__(self, sumo_config="traditional_traffic.sumo.cfg", gui=False):
-        super(SumoEnv, self).__init__()
-        self.sumo_config = sumo_config
+        base_path = os.path.dirname(__file__)
+        self.sumo_config = os.path.join(base_path, sumo_config)
         self.gui = gui
-        # Assume 4 traffic light phases (adjust based on .net.xml)
-        self.action_space = gym.spaces.Discrete(4)
-        # Observations: queue lengths for 8 lanes (adjust based on network)
-        self.observation_space = gym.spaces.Box(
-            low=0, high=100, shape=(8,), dtype=np.float32
-        )
-        self.max_steps = 3600  # 1 hour simulation
+        self.junction_id = "junction"  # Updated to match net.xml
+        self.phases = [
+            "GGrGrrGGrGrr",  # Phase 0: North-South straight
+            "gyrgrrgyrgrr",  # Phase 1: North-South yellow
+            "grGgrrgrGgrr",  # Phase 2: North-South left
+            "grygrrgrygrr",  # Phase 3: North-South left yellow
+            "GrrGGrGrrGGr",  # Phase 4: East-West straight
+            "grrgyrgrrgyr",  # Phase 5: East-West yellow
+            "grrgrGgrrgrG",  # Phase 6: East-West left
+            "grrgrygrrgry",  # Phase 7: East-West left yellow
+        ]
+        self.lane_ids = [
+            "end1_junction_0",
+            "end1_junction_1",
+            "end1_junction_2",
+            "end2_junction_0",
+            "end2_junction_1",
+            "end2_junction_2",
+            "end3_junction_0",
+            "end3_junction_1",
+            "end3_junction_2",
+            "end4_junction_0",
+            "end4_junction_1",
+            "end4_junction_2",
+        ]
+        self.max_steps = 3600
         self.step_count = 0
         self.plexe = None
         self.topology = {}
         self.departed_vehicles = 0
         self.prev_vehicle_count = 0
+        self.observation_shape = (12 * 3,)  # Queue lengths, speeds, waiting times
+        self.action_count = len(self.phases)  # 8 phases
+        self.last_action = 0  # Initialize last action
 
-    def reset(self):
+    def initialize_simulation(self):
+        if traci.isLoaded():
+            traci.close()
         sumo_binary = "sumo-gui" if self.gui else "sumo"
         sumo_cmd = [
             sumo_binary,
@@ -94,18 +117,41 @@ class SumoEnv(gym.Env):
             "-c",
             self.sumo_config,
         ]
-        traci.start(sumo_cmd)
+        try:
+            traci.start(sumo_cmd)
+            print("Available traffic light IDs:", traci.trafficlight.getIDList())
+        except traci.exceptions.TraCIException as e:
+            print(f"Failed to start SUMO: {e}")
+            sys.exit(1)
         self.plexe = Plexe()
         traci.addStepListener(self.plexe)
         self.step_count = 0
         self.topology = {}
         self.departed_vehicles = 0
         self.prev_vehicle_count = 0
-        return self._get_observation()
+        try:
+            traci.trafficlight.setRedYellowGreenState(self.junction_id, self.phases[0])
+        except traci.exceptions.TraCIException as e:
+            print(f"Error setting traffic light state: {e}")
+            traci.close()
+            sys.exit(1)
+        return self.get_observation()
 
-    def step(self, action):
-        # Apply traffic light phase (replace 'junction_id' with actual ID from .net.xml)
-        traci.trafficlight.setPhase("junction_id", action)
+    def take_action(self, action):
+        if not 0 <= action < self.action_count:
+            raise ValueError(
+                f"Action {action} is invalid. Must be in [0, {self.action_count - 1}]."
+            )
+        self.last_action = action
+        if self.step_count % 10 == 0:  # Change phase every 10 steps
+            try:
+                traci.trafficlight.setRedYellowGreenState(
+                    self.junction_id, self.phases[action]
+                )
+            except traci.exceptions.TraCIException as e:
+                print(f"Error setting traffic light phase: {e}")
+                traci.close()
+                sys.exit(1)
         traci.simulationStep()
 
         if self.step_count % ADD_PLATOON_STEP == 0:
@@ -115,38 +161,73 @@ class SumoEnv(gym.Env):
             communicate(self.plexe, self.topology)
 
         self.step_count += 1
-        obs = self._get_observation()
-        reward = self._calculate_reward()
-        done = self.step_count >= self.max_steps
-        info = {}
-        return obs, reward, done, info
+        observation = self.get_observation()
+        reward = self.get_reward()
+        terminated = self.step_count >= self.max_steps
+        truncated = False
+        info = {
+            "total_waiting_time": sum(
+                traci.vehicle.getWaitingTime(veh) for veh in traci.vehicle.getIDList()
+            ),
+            "total_queue_length": sum(
+                traci.lane.getLastStepVehicleNumber(lane) for lane in self.lane_ids
+            ),
+            "throughput": max(0, self.prev_vehicle_count - traci.vehicle.getIDCount()),
+        }
+        return observation, reward, terminated, truncated, info
 
-    def _get_observation(self):
-        # Get queue lengths for up to 8 lanes (adjust based on .net.xml)
-        lanes = traci.lane.getIDList()[:8]  # Select first 8 lanes
-        queue_lengths = [traci.lane.getLastStepVehicleNumber(lane) for lane in lanes]
-        # Normalize to [0, 1] assuming max queue length of 100
-        return np.array([min(q, 100) / 100 for q in queue_lengths], dtype=np.float32)
+    def get_observation(self):
+        queue_lengths = []
+        avg_speeds = []
+        waiting_times = []
+        for lane in self.lane_ids:
+            queue_lengths.append(traci.lane.getLastStepVehicleNumber(lane))
+            speeds = [
+                traci.vehicle.getSpeed(v)
+                for v in traci.lane.getLastStepVehicleIDs(lane)
+            ]
+            avg_speed = np.mean(speeds) if speeds else 0
+            avg_speeds.append(avg_speed)
+            waiting_time = sum(
+                traci.vehicle.getWaitingTime(v)
+                for v in traci.lane.getLastStepVehicleIDs(lane)
+            )
+            waiting_times.append(waiting_time)
+        queue_lengths = [min(q, 100) / 100 for q in queue_lengths]
+        avg_speeds = [min(s, SPEED) / SPEED for s in avg_speeds]
+        waiting_times = [min(w, 100) / 100 for w in waiting_times]
+        return np.array(queue_lengths + avg_speeds + waiting_times, dtype=np.float32)
 
-    def _calculate_reward(self):
-        # Calculate total waiting time
+    def get_reward(self):
         vehicles = traci.vehicle.getIDList()
         total_waiting_time = sum(traci.vehicle.getWaitingTime(veh) for veh in vehicles)
-        # Calculate total queue length
         total_queue_length = sum(
-            traci.lane.getLastStepVehicleNumber(lane) for lane in traci.lane.getIDList()
+            traci.lane.getLastStepVehicleNumber(lane) for lane in self.lane_ids
         )
-        # Calculate throughput (vehicles that left the simulation)
         current_vehicle_count = traci.vehicle.getIDCount()
-        throughput = max(
-            0, self.prev_vehicle_count - current_vehicle_count
-        )  # Approximate departed vehicles
+        throughput = max(0, self.prev_vehicle_count - current_vehicle_count)
         self.prev_vehicle_count = current_vehicle_count
-        # Reward: minimize waiting time and queue length, maximize throughput
-        reward = -0.5 * total_waiting_time - 0.3 * total_queue_length + 0.2 * throughput
-        # Normalize reward to approximate LunarLander range (-250, 300)
+        phase_change_penalty = (
+            -0.1
+            if self.step_count > 0
+            and traci.trafficlight.getPhase(self.junction_id) != self.last_action
+            else 0
+        )
+        reward = (
+            -0.5 * total_waiting_time
+            - 0.3 * total_queue_length
+            + 0.2 * throughput
+            + phase_change_penalty
+        )
         reward = np.clip(reward / 100, -2.5, 3.0)
         return reward
 
+    def get_observation_shape(self):
+        return self.observation_shape
+
+    def get_action_count(self):
+        return self.action_count
+
     def close(self):
-        traci.close()
+        if traci.isLoaded():
+            traci.close()

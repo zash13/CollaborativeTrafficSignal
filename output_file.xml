@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-08-02 19:46:24 by Eclipse SUMO GUI Version v1_24_0+0078-dbeacafec2b
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="/home/kk_gorbee/Documents/project/ML/CollaborativeTrafficSignal/sumo/traditional_traffic/traditional_traffic.net.xml"/>
+        <route-files value="/home/kk_gorbee/Documents/project/ML/CollaborativeTrafficSignal/sumo/traditional_traffic/traditional_traffic.rou.xml"/>
+    </input>
+
+    <output>
+        <tripinfo-output value="output_file.xml"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <end value="15000"/>
+        <step-length value="0.01"/>
+    </time>
+
+    <report>
+        <duration-log.statistics value="true"/>
+    </report>
+
+    <traci_server>
+        <remote-port value="44385"/>
+    </traci_server>
+
+    <gui_only>
+        <gui-settings-file value="/home/kk_gorbee/Documents/project/ML/CollaborativeTrafficSignal/sumo/traditional_traffic/traditional_traffic.gui.xml"/>
+        <start value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<tripinfos xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tripinfo_file.xsd">
+</tripinfos>

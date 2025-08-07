@@ -12,16 +12,17 @@ else:
     sys.exit("Please declare environment variable 'SUMO_HOME'")
 
 VEHICLE_LENGTH = 4
-DISTANCE = 6
+DISTANCE = 4
 LANE_NUM = 12
 PLATOON_SIZE = 1
-SPEED = 16.6
+SPEED = 27.78  # 100 km/h
 V2I_RANGE = 200
 PLATOON_LENGTH = VEHICLE_LENGTH * PLATOON_SIZE + DISTANCE * (PLATOON_SIZE - 1)
 ADD_PLATOON_PRO = 0.3
-ADD_PLATOON_STEP = 600
+ADD_PLATOON_STEP = 120  # Adjusted for 5s steps (600s / 5 = 120 steps)
 MAX_ACCEL = 2.6
 STOP_LINE = 15.0
+SIM_STEP_SIZE = 5.0  # Each simulation step advances 5 seconds
 
 
 def add_single_platoon(plexe, topology, step, lane):
@@ -34,13 +35,13 @@ def add_single_platoon(plexe, topology, step, lane):
             vid,
             routeID,
             departPos=str(100 - i * (VEHICLE_LENGTH + DISTANCE)),
-            departSpeed=str(5),
+            departSpeed=str(20),  # 72 km/h
             departLane=str(lane % 3),
             typeID="vtypeauto",
         )
         plexe.set_path_cacc_parameters(vid, DISTANCE, 2, 1, 0.5)
         plexe.set_cc_desired_speed(vid, SPEED)
-        plexe.set_acc_headway_time(vid, 1.5)
+        plexe.set_acc_headway_time(vid, 1.0)
         plexe.use_controller_acceleration(vid, False)
         plexe.set_fixed_lane(vid, lane % 3, False)
         traci.vehicle.setSpeedMode(vid, 31)
@@ -70,7 +71,7 @@ class SumoEnvironment:
         base_path = os.path.dirname(__file__)
         self.sumo_config = os.path.join(base_path, sumo_config)
         self.gui = gui
-        self.junction_id = "junction"  # Updated to match net.xml
+        self.junction_id = "junction"
         self.phases = [
             "GGrGrrGGrGrr",  # Phase 0: North-South straight
             "gyrgrrgyrgrr",  # Phase 1: North-South yellow
@@ -95,15 +96,18 @@ class SumoEnvironment:
             "end4_junction_1",
             "end4_junction_2",
         ]
-        self.max_steps = 3600
+        self.max_steps = 720  # 3600s / 5s per step
         self.step_count = 0
         self.plexe = None
         self.topology = {}
         self.departed_vehicles = 0
         self.prev_vehicle_count = 0
-        self.observation_shape = (12 * 3,)  # Queue lengths, speeds, waiting times
+        self.observation_shape = (
+            12 * 3 + 8,
+        )  # Queue lengths, speeds, waiting times, phase one-hot
         self.action_count = len(self.phases)  # 8 phases
-        self.last_action = 0  # Initialize last action
+        self.last_action = 0
+        self.prev_phase = 0
 
     def initialize_simulation(self):
         if traci.isLoaded():
@@ -116,6 +120,8 @@ class SumoEnvironment:
             "output_file.xml",
             "-c",
             self.sumo_config,
+            "--step-length",
+            str(SIM_STEP_SIZE),  # Set step size to 5 seconds
         ]
         try:
             traci.start(sumo_cmd)
@@ -143,21 +149,22 @@ class SumoEnvironment:
                 f"Action {action} is invalid. Must be in [0, {self.action_count - 1}]."
             )
         self.last_action = action
-        if self.step_count % 10 == 0:  # Change phase every 10 steps
+        if self.step_count % 1 == 0:  # Change phase every step (5 seconds)
             try:
                 traci.trafficlight.setRedYellowGreenState(
                     self.junction_id, self.phases[action]
                 )
+                self.prev_phase = action
             except traci.exceptions.TraCIException as e:
                 print(f"Error setting traffic light phase: {e}")
                 traci.close()
                 sys.exit(1)
-        traci.simulationStep()
+        traci.simulationStep()  # Advances 5 seconds
 
-        if self.step_count % ADD_PLATOON_STEP == 0:
+        if self.step_count % (ADD_PLATOON_STEP // 5) == 0:  # Adjusted for 5s steps
             add_platoons(self.plexe, self.topology, self.step_count)
 
-        if self.step_count % 10 == 1:
+        if self.step_count % 2 == 1:  # Adjusted for communication every 10s
             communicate(self.plexe, self.topology)
 
         self.step_count += 1
@@ -192,11 +199,19 @@ class SumoEnvironment:
                 traci.vehicle.getWaitingTime(v)
                 for v in traci.lane.getLastStepVehicleIDs(lane)
             )
-            waiting_times.append(waiting_time)
+            waiting_times.append(
+                waiting_time / max(1, traci.lane.getLastStepVehicleNumber(lane))
+            )  # Normalize per vehicle
         queue_lengths = [min(q, 100) / 100 for q in queue_lengths]
         avg_speeds = [min(s, SPEED) / SPEED for s in avg_speeds]
         waiting_times = [min(w, 100) / 100 for w in waiting_times]
-        return np.array(queue_lengths + avg_speeds + waiting_times, dtype=np.float32)
+        current_phase = traci.trafficlight.getPhase(self.junction_id)
+        phase_one_hot = [
+            1 if i == current_phase else 0 for i in range(len(self.phases))
+        ]
+        return np.array(
+            queue_lengths + avg_speeds + waiting_times + phase_one_hot, dtype=np.float32
+        )
 
     def get_reward(self):
         vehicles = traci.vehicle.getIDList()
@@ -204,22 +219,26 @@ class SumoEnvironment:
         total_queue_length = sum(
             traci.lane.getLastStepVehicleNumber(lane) for lane in self.lane_ids
         )
+        stopped_vehicles = sum(
+            1
+            for lane in self.lane_ids
+            for v in traci.lane.getLastStepVehicleIDs(lane)
+            if traci.vehicle.getSpeed(v) < 0.1
+        )
         current_vehicle_count = traci.vehicle.getIDCount()
         throughput = max(0, self.prev_vehicle_count - current_vehicle_count)
         self.prev_vehicle_count = current_vehicle_count
         phase_change_penalty = (
-            -0.1
-            if self.step_count > 0
-            and traci.trafficlight.getPhase(self.junction_id) != self.last_action
-            else 0
+            -0.5 if self.step_count > 0 and self.last_action != self.prev_phase else 0
         )
         reward = (
             -0.5 * total_waiting_time
             - 0.3 * total_queue_length
-            + 0.2 * throughput
+            - 0.2 * stopped_vehicles
+            + 0.3 * throughput
             + phase_change_penalty
         )
-        reward = np.clip(reward / 100, -2.5, 3.0)
+        reward = np.clip(reward / 100, -5.0, 5.0)
         return reward
 
     def get_observation_shape(self):

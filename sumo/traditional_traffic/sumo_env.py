@@ -2,7 +2,7 @@ import numpy as np
 import traci
 import os
 import sys
-from plexe import Plexe, ACC, CACC
+from plexe import Plexe, ACC
 from sumo.traditional_traffic.utils import communicate
 
 if "SUMO_HOME" in os.environ:
@@ -14,48 +14,48 @@ else:
 VEHICLE_LENGTH = 4
 DISTANCE = 4
 LANE_NUM = 12
-PLATOON_SIZE = 1
-SPEED = 27.78  # 100 km/h
+PLATOON_SIZE = 2
+SPEED = 27.78
 V2I_RANGE = 200
 PLATOON_LENGTH = VEHICLE_LENGTH * PLATOON_SIZE + DISTANCE * (PLATOON_SIZE - 1)
-ADD_PLATOON_PRO = 0.3
-ADD_PLATOON_STEP = 120  # Adjusted for 5s steps (600s / 5 = 120 steps)
+ADD_PLATOON_PRO = 0.7
+ADD_PLATOON_STEP = 60
 MAX_ACCEL = 2.6
 STOP_LINE = 15.0
-SIM_STEP_SIZE = 5.0  # Each simulation step advances 5 seconds
+SIM_STEP_SIZE = 5.0
+VEHICLE_ID_COUNTER = 0
+MIN_GREEN_STEPS = 3
 
 
 def add_single_platoon(plexe, topology, step, lane):
+    global VEHICLE_ID_COUNTER
     import random
 
     for i in range(PLATOON_SIZE):
-        vid = "v.%d.%d.%d" % (step // ADD_PLATOON_STEP, lane, i)
-        routeID = "route_%d" % lane
-        traci.vehicle.add(
-            vid,
-            routeID,
-            departPos=str(100 - i * (VEHICLE_LENGTH + DISTANCE)),
-            departSpeed=str(20),  # 72 km/h
-            departLane=str(lane % 3),
-            typeID="vtypeauto",
-        )
+        vid = f"v.{VEHICLE_ID_COUNTER}.{lane}.{i}"
+        VEHICLE_ID_COUNTER += 1
+        routeID = f"route_{lane}"
+        try:
+            traci.vehicle.add(
+                vid,
+                routeID,
+                departPos=str(100 - i * (VEHICLE_LENGTH + DISTANCE)),
+                departSpeed=str(20),
+                departLane=str(lane % 3),
+                typeID="vtypeauto",
+            )
+        except traci.exceptions.TraCIException as e:
+            print(f"Warning: Could not add vehicle {vid}: {e}")
+            continue
         plexe.set_path_cacc_parameters(vid, DISTANCE, 2, 1, 0.5)
         plexe.set_cc_desired_speed(vid, SPEED)
         plexe.set_acc_headway_time(vid, 1.0)
         plexe.use_controller_acceleration(vid, False)
         plexe.set_fixed_lane(vid, lane % 3, False)
         traci.vehicle.setSpeedMode(vid, 31)
-        if i == 0:
-            plexe.set_active_controller(vid, ACC)
-            traci.vehicle.setColor(vid, (255, 255, 255, 255))
-            topology[vid] = {}
-        else:
-            plexe.set_active_controller(vid, CACC)
-            traci.vehicle.setColor(vid, (200, 200, 0, 255))
-            topology[vid] = {
-                "front": "v.%d.%d.%d" % (step // ADD_PLATOON_STEP, lane, i - 1),
-                "leader": "v.%d.%d.0" % (step // ADD_PLATOON_STEP, lane),
-            }
+        plexe.set_active_controller(vid, ACC)
+        traci.vehicle.setColor(vid, (255, 255, 255, 255))
+        topology[vid] = {}
 
 
 def add_platoons(plexe, topology, step):
@@ -73,14 +73,14 @@ class SumoEnvironment:
         self.gui = gui
         self.junction_id = "junction"
         self.phases = [
-            "GGrGrrGGrGrr",  # Phase 0: North-South straight
-            "gyrgrrgyrgrr",  # Phase 1: North-South yellow
-            "grGgrrgrGgrr",  # Phase 2: North-South left
-            "grygrrgrygrr",  # Phase 3: North-South left yellow
-            "GrrGGrGrrGGr",  # Phase 4: East-West straight
-            "grrgyrgrrgyr",  # Phase 5: East-West yellow
-            "grrgrGgrrgrG",  # Phase 6: East-West left
-            "grrgrygrrgry",  # Phase 7: East-West left yellow
+            "GGrGrrGGrGrr",
+            "gyrgrrgyrgrr",
+            "grGgrrgrGgrr",
+            "grygrrgrygrr",
+            "GrrGGrGrrGGr",
+            "grrgyrgrrgyr",
+            "grrgrGgrrgrG",
+            "grrgrygrrgry",
         ]
         self.lane_ids = [
             "end1_junction_0",
@@ -96,20 +96,21 @@ class SumoEnvironment:
             "end4_junction_1",
             "end4_junction_2",
         ]
-        self.max_steps = 720  # 3600s / 5s per step
+        self.max_steps = 720
         self.step_count = 0
         self.plexe = None
         self.topology = {}
         self.departed_vehicles = 0
         self.prev_vehicle_count = 0
-        self.observation_shape = (
-            12 * 3 + 8,
-        )  # Queue lengths, speeds, waiting times, phase one-hot
-        self.action_count = len(self.phases)  # 8 phases
+        self.observation_shape = (12 * 3 + 8,)
+        self.action_count = len(self.phases)
         self.last_action = 0
         self.prev_phase = 0
+        self.green_steps_remaining = 0
 
     def initialize_simulation(self):
+        global VEHICLE_ID_COUNTER
+        VEHICLE_ID_COUNTER = 0
         if traci.isLoaded():
             traci.close()
         sumo_binary = "sumo-gui" if self.gui else "sumo"
@@ -121,7 +122,7 @@ class SumoEnvironment:
             "-c",
             self.sumo_config,
             "--step-length",
-            str(SIM_STEP_SIZE),  # Set step size to 5 seconds
+            str(SIM_STEP_SIZE),
         ]
         try:
             traci.start(sumo_cmd)
@@ -135,6 +136,7 @@ class SumoEnvironment:
         self.topology = {}
         self.departed_vehicles = 0
         self.prev_vehicle_count = 0
+        self.green_steps_remaining = 0
         try:
             traci.trafficlight.setRedYellowGreenState(self.junction_id, self.phases[0])
         except traci.exceptions.TraCIException as e:
@@ -148,23 +150,30 @@ class SumoEnvironment:
             raise ValueError(
                 f"Action {action} is invalid. Must be in [0, {self.action_count - 1}]."
             )
+        phase_change = self.last_action != action
+        if phase_change and self.green_steps_remaining > 0:
+            action = self.last_action  # Enforce min green time
+        else:
+            self.green_steps_remaining = (
+                MIN_GREEN_STEPS if action in [0, 2, 4, 6] else 0
+            )
         self.last_action = action
-        if self.step_count % 1 == 0:  # Change phase every step (5 seconds)
-            try:
-                traci.trafficlight.setRedYellowGreenState(
-                    self.junction_id, self.phases[action]
-                )
-                self.prev_phase = action
-            except traci.exceptions.TraCIException as e:
-                print(f"Error setting traffic light phase: {e}")
-                traci.close()
-                sys.exit(1)
-        traci.simulationStep()  # Advances 5 seconds
+        try:
+            traci.trafficlight.setRedYellowGreenState(
+                self.junction_id, self.phases[action]
+            )
+            self.prev_phase = action
+        except traci.exceptions.TraCIException as e:
+            print(f"Error setting traffic light phase: {e}")
+            traci.close()
+            sys.exit(1)
+        self.green_steps_remaining = max(0, self.green_steps_remaining - 1)
+        traci.simulationStep()
 
-        if self.step_count % (ADD_PLATOON_STEP // 5) == 0:  # Adjusted for 5s steps
+        if self.step_count % ADD_PLATOON_STEP == 0:
             add_platoons(self.plexe, self.topology, self.step_count)
 
-        if self.step_count % 2 == 1:  # Adjusted for communication every 10s
+        if self.step_count % 10 == 1:
             communicate(self.plexe, self.topology)
 
         self.step_count += 1
@@ -172,6 +181,13 @@ class SumoEnvironment:
         reward = self.get_reward()
         terminated = self.step_count >= self.max_steps
         truncated = False
+        stopped_vehicles = sum(
+            1
+            for lane in self.lane_ids
+            for v in traci.lane.getLastStepVehicleIDs(lane)
+            if traci.vehicle.getSpeed(v) < 0.1
+        )
+        phase_change_penalty = -0.5 if self.step_count > 0 and phase_change else 0
         info = {
             "total_waiting_time": sum(
                 traci.vehicle.getWaitingTime(veh) for veh in traci.vehicle.getIDList()
@@ -180,6 +196,8 @@ class SumoEnvironment:
                 traci.lane.getLastStepVehicleNumber(lane) for lane in self.lane_ids
             ),
             "throughput": max(0, self.prev_vehicle_count - traci.vehicle.getIDCount()),
+            "stopped_vehicles": stopped_vehicles,
+            "phase_change_penalty": phase_change_penalty,
         }
         return observation, reward, terminated, truncated, info
 
@@ -201,7 +219,7 @@ class SumoEnvironment:
             )
             waiting_times.append(
                 waiting_time / max(1, traci.lane.getLastStepVehicleNumber(lane))
-            )  # Normalize per vehicle
+            )
         queue_lengths = [min(q, 100) / 100 for q in queue_lengths]
         avg_speeds = [min(s, SPEED) / SPEED for s in avg_speeds]
         waiting_times = [min(w, 100) / 100 for w in waiting_times]
@@ -209,9 +227,13 @@ class SumoEnvironment:
         phase_one_hot = [
             1 if i == current_phase else 0 for i in range(len(self.phases))
         ]
-        return np.array(
+        observation = np.array(
             queue_lengths + avg_speeds + waiting_times + phase_one_hot, dtype=np.float32
         )
+        if np.any(np.isnan(observation)):
+            print(f"Warning: NaN in observation, replacing with 0: {observation}")
+            observation = np.nan_to_num(observation, nan=0.0)
+        return observation
 
     def get_reward(self):
         vehicles = traci.vehicle.getIDList()
@@ -238,7 +260,7 @@ class SumoEnvironment:
             + 0.3 * throughput
             + phase_change_penalty
         )
-        reward = np.clip(reward / 100, -5.0, 5.0)
+        reward = np.clip(reward / 100, -100.0, 100.0)
         return reward
 
     def get_observation_shape(self):

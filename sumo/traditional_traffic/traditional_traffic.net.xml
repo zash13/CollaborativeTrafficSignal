@@ -1,41 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
-<!-- generated on 2019年12月27日 星期五 21时09分10秒 by Eclipse SUMO netedit Version v1_4_0+0055-11695c0903
-<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
-
-    <input>
-        <sumo-net-file value="/home/yy/traditional_traffic/traditional_traffic.net.xml"/>
-    </input>
-
-    <output>
-        <output-file value="/home/yy/traditional_traffic/traditional_traffic.net.xml"/>
-    </output>
-
-    <processing>
-        <geometry.min-radius.fix.railways value="false"/>
-        <geometry.max-grade.fix value="false"/>
-        <offset.disable-normalization value="true"/>
-        <lefthand value="false"/>
-    </processing>
-
-    <junctions>
-        <no-turnarounds value="true"/>
-        <junctions.corner-detail value="5"/>
-        <junctions.limit-turn-speed value="5.5"/>
-        <rectangular-lane-cut value="false"/>
-    </junctions>
-
-    <pedestrian>
-        <walkingareas value="false"/>
-    </pedestrian>
-
-    <report>
-        <aggregate-warnings value="5"/>
-    </report>
-
-</configuration>
--->
-
 <net version="1.3" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
 
     <location netOffset="0.00,0.00" convBoundary="-500.00,-500.00,500.00,500.00" origBoundary="-10000000000.00,-10000000000.00,10000000000.00,10000000000.00" projParameter="!"/>
@@ -119,14 +82,14 @@
     </edge>
 
     <tlLogic id="junction" type="static" programID="0" offset="0">
-        <phase duration="30" state="GGrGrrGGrGrr"/>
-        <phase duration="5"  state="gyrgrrgyrgrr"/>
-        <phase duration="20" state="grGgrrgrGgrr"/>
-        <phase duration="5"  state="grygrrgrygrr"/>
-        <phase duration="30" state="GrrGGrGrrGGr"/>
-        <phase duration="5"  state="grrgyrgrrgyr"/>
-        <phase duration="20" state="grrgrGgrrgrG"/>
-        <phase duration="5"  state="grrgrygrrgry"/>
+        <phase duration="15" state="GGrGrrGGrGrr"/>
+        <phase duration="3" state="gyrgrrgyrgrr"/>
+        <phase duration="10" state="grGgrrgrGgrr"/>
+        <phase duration="3" state="grygrrgrygrr"/>
+        <phase duration="15" state="GrrGGrGrrGGr"/>
+        <phase duration="3" state="grrgyrgrrgyr"/>
+        <phase duration="10" state="grrgrGgrrgrG"/>
+        <phase duration="3" state="grrgrygrrgry"/>
     </tlLogic>
 
     <junction id="end1" type="dead_end" x="0.00" y="500.00" incLanes="junction_end1_0 junction_end1_1 junction_end1_2" intLanes="" shape="0.00,500.00 9.60,500.00 0.00,500.00"/>
@@ -134,16 +97,16 @@
     <junction id="end3" type="dead_end" x="0.00" y="-500.00" incLanes="junction_end3_0 junction_end3_1 junction_end3_2" intLanes="" shape="0.00,-500.00 -9.60,-500.00 0.00,-500.00"/>
     <junction id="end4" type="dead_end" x="-500.00" y="0.00" incLanes="junction_end4_0 junction_end4_1 junction_end4_2" intLanes="" shape="-500.00,0.00 -500.00,9.60 -500.00,0.00"/>
     <junction id="junction" type="traffic_light" x="0.00" y="0.00" incLanes="end1_junction_0 end1_junction_1 end1_junction_2 end2_junction_0 end2_junction_1 end2_junction_2 end3_junction_0 end3_junction_1 end3_junction_2 end4_junction_0 end4_junction_1 end4_junction_2" intLanes=":junction_0_0 :junction_1_0 :junction_2_0 :junction_3_0 :junction_4_0 :junction_5_0 :junction_6_0 :junction_7_0 :junction_8_0 :junction_9_0 :junction_10_0 :junction_11_0" shape="-9.60,13.60 9.60,13.60 10.04,11.38 10.60,10.60 11.38,10.04 12.38,9.71 13.60,9.60 13.60,-9.60 11.38,-10.04 10.60,-10.60 10.04,-11.38 9.71,-12.38 9.60,-13.60 -9.60,-13.60 -10.04,-11.38 -10.60,-10.60 -11.38,-10.04 -12.38,-9.71 -13.60,-9.60 -13.60,9.60 -11.38,10.04 -10.60,10.60 -10.04,11.38 -9.71,12.38">
-        <request index="0"  response="000000000000" foes="000000000000" cont="0"/>
-        <request index="1"  response="000000000000" foes="110100010000" cont="0"/>
-        <request index="2"  response="000010000000" foes="100010110000" cont="0"/>
-        <request index="3"  response="000000000000" foes="000000000000" cont="0"/>
-        <request index="4"  response="000010000110" foes="100010000110" cont="0"/>
-        <request index="5"  response="010110000100" foes="010110000100" cont="0"/>
-        <request index="6"  response="000000000000" foes="000000000000" cont="0"/>
-        <request index="7"  response="000000000000" foes="010000110100" cont="0"/>
-        <request index="8"  response="000000000010" foes="110000100010" cont="0"/>
-        <request index="9"  response="000000000000" foes="000000000000" cont="0"/>
+        <request index="0" response="000000000000" foes="000000000000" cont="0"/>
+        <request index="1" response="000000000000" foes="110100010000" cont="0"/>
+        <request index="2" response="000010000000" foes="100010110000" cont="0"/>
+        <request index="3" response="000000000000" foes="000000000000" cont="0"/>
+        <request index="4" response="000010000110" foes="100010000110" cont="0"/>
+        <request index="5" response="010110000100" foes="010110000100" cont="0"/>
+        <request index="6" response="000000000000" foes="000000000000" cont="0"/>
+        <request index="7" response="000000000000" foes="010000110100" cont="0"/>
+        <request index="8" response="000000000010" foes="110000100010" cont="0"/>
+        <request index="9" response="000000000000" foes="000000000000" cont="0"/>
         <request index="10" response="000110000010" foes="000110100010" cont="0"/>
         <request index="11" response="000100010110" foes="000100010110" cont="0"/>
     </junction>

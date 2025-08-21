@@ -1,3 +1,9 @@
+# Force CPU usage before any TensorFlow imports
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Suppress TensorFlow logs except errors
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Disable GPU
+
 import numpy as np
 from DQN.DQN_Agent import (
     AgentFactory,
@@ -8,6 +14,7 @@ from DQN.DQN_Agent import (
     RewardPolicyType,
 )
 from sumo.traditional_traffic.sumo_env import SumoEnvironment
+from DQN.logHandler import Logging, Verbosity
 import time
 import csv
 import traci
@@ -16,9 +23,16 @@ import traci
 def main():
     sumo_config = "traditional_traffic.sumo.cfg"
     gui = False
-    max_steps = 360  # 3600s / 10s
+    max_steps = 720  # 3600s / 5s
     episodes = 100
     render = False
+
+    # Initialize logging for reward status
+    logger = Logging(
+        "reward_log.txt",
+        verbosity=Verbosity.DEBUG,
+        user_name="TrafficDQN",
+    )
 
     env = SumoEnvironment(sumo_config=sumo_config, gui=gui)
 
@@ -50,7 +64,7 @@ def main():
         update_target_network_method=UpdateTargetNetworkType.SOFT,
         update_factor=0.8,
         target_update_frequency=10,
-        reward_range=(-10, 20),
+        reward_range=(-100, 100),
         use_normalization=False,
     )
 
@@ -77,7 +91,8 @@ def main():
         done = False
 
         while not done and steps < max_steps:
-            action = agent.select_action(np.array(state))
+            state_batched = np.array(state)[np.newaxis, :]  # Shape: (1, 44)
+            action = agent.select_action(state_batched)
             next_state, reward, terminated, truncated, info = env.take_action(action)
             done = terminated or truncated
             heuristic = None
@@ -87,7 +102,20 @@ def main():
             total_reward += reward
             steps += 1
             if render and gui:
-                time.sleep(0.01)  # Minimal delay
+                time.sleep(0.01)
+
+            # Log reward components per step (debug level)
+            logger.debug(
+                "Step {}: Reward = {:.2f}, Waiting Time = {:.2f}, Queue Length = {}, Stopped Vehicles = {}, Throughput = {}, Phase Penalty = {:.2f}",
+                steps,
+                reward,
+                info.get("total_waiting_time", 0),
+                info.get("total_queue_length", 0),
+                info.get("stopped_vehicles", 0),
+                info.get("throughput", 0),
+                info.get("phase_change_penalty", 0),
+                show_in_console=False,
+            )
 
         if done:
             success_count += 1
@@ -116,6 +144,16 @@ def main():
                     info.get("throughput", 0),
                 ]
             )
+
+        # Log episode summary (info level)
+        logger.info(
+            "Episode {}: Total Reward = {:.2f}, Avg Waiting Time = {:.2f}s, Throughput = {}",
+            episode + 1,
+            total_reward,
+            avg_waiting_time,
+            info.get("throughput", 0),
+            show_in_console=True,
+        )
 
     env.close()
 

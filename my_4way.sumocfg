@@ -1,0 +1,14 @@
+<configuration>
+    <input>
+        <net-file value="my_4way.net.xml"/>
+        <route-files value="my_4way.rou.xml"/> <!-- Placeholder; we'll generate this dynamically -->
+    </input>
+    <time>
+        <begin value="0"/>
+        <end value="3600"/> <!-- 1-hour simulation -->
+    </time>
+    <gui-only>
+        <start value="true"/>
+        <quit-on-end value="true"/>
+    </gui-only>
+</configuration>

@@ -7,6 +7,6 @@
 [submodule "V3/DQN"]
 	path = V3/DQN
 	url = https://github.com/zash13/DQN_Agent.git
-[submodule "V3/sumo-rl"]
-	path = V3/sumo-rl
+[submodule "V2/sumo-rl"]
+	path = V2/sumo-rl
 	url = https://github.com/LucasAlegre/sumo-rl.git

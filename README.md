@@ -26,7 +26,7 @@ this project implements a deep q-network (DQN)-based agent for adaptive traffic 
       cd V3/sumo
       cmake .
       make -j$(nproc)
-      export SUMO_HOME=$(pwd)/V3/sumo
+      export SUMO_HOME=$(pwd)/sumo_home
       ```
 
    2. **Using Your Own SUMO Installation**
@@ -42,9 +42,9 @@ this project implements a deep q-network (DQN)-based agent for adaptive traffic 
 
 ## Project Structure
 
-- V3/DQN/
+- DQN/
   Submodule: DQN agent implementation
-- V3/sumo/
+- sumo_home/
   Submodule: SUMO (optional if you use system SUMO)
 - sumo_env.py
   SUMO environment wrapper (Gym-like API: initialize_simulation, take_action, close).

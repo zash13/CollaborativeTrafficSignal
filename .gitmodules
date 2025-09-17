@@ -13,3 +13,6 @@
 [submodule "V3/sumo_home"]
 	path = V3/sumo_home
 	url = https://github.com/eclipse-sumo/sumo
+[submodule "V3/DQN_Agent"]
+	path = V3/DQN_Agent
+	url = https://github.com/zash13/DQN_Agent.git

@@ -1,4 +1,6 @@
-
 [submodule "sumo_home"]
 	path = sumo_home
 	url = https://github.com/eclipse-sumo/sumo
+[submodule "DQN"]
+	path = DQN
+	url = https://github.com/zash13/DQN_Agent.git

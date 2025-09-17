@@ -10,3 +10,6 @@
 [submodule "V2/sumo-rl"]
 	path = V2/sumo-rl
 	url = https://github.com/LucasAlegre/sumo-rl.git
+[submodule "V3/sumo_home"]
+	path = V3/sumo_home
+	url = https://github.com/eclipse-sumo/sumo

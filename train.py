@@ -9,6 +9,7 @@ from DQN.DQN_Agent import (
 )
 from sumo_env import SumoEnv
 import os
+import sys
 
 
 EPOCHES = 100
@@ -91,19 +92,20 @@ def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS)
     import matplotlib.pyplot as plt
 
     plt.plot(rewards)
-    plt.xlabel("Episode")
-    plt.ylabel("Total Reward")
-    plt.title("DQN Training on 4-Way SUMO Intersection")
+    plt.xlabel("episode")
+    plt.ylabel("total reward")
+    plt.title("dqn training on 4-way sumo intersection")
     plt.show()
+    agent.save("checkpoints/dqn_final")
     return rewards
 
 
 if __name__ == "__main__":
     if not os.path.exists(Config.NET_FILE):
-        print(f"[ERROR] Net file not found: {Config.NET_FILE}")
+        print(f"[error] net file not found: {config.net_file}")
         sys.exit(1)
 
     # Example: Train DQN
     env = SumoEnv()
-    rewards = train_dqn(env, num_episodes=100)  # Or run basic loop if no DQN
+    rewards = train_dqn(env, num_episodes=EPOCHES)  # Or run basic loop if no DQN
     print("[INFO] Training complete.")

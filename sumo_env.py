@@ -110,10 +110,6 @@ class VehicleSpawner:
                 continue
             if src in self.incoming_edges and dst in self.outgoing_edges:
                 self.valid_routes.append((src, dst))
-        print(f"[INFO] Using TLS '{selected_tls}' mapped to node '{node.getID()}'.")
-        print(f"[INFO] Incoming edges: {self.incoming_edges}")
-        print(f"[INFO] Outgoing edges: {self.outgoing_edges}")
-        print(f"[INFO] Valid routes count: {len(self.valid_routes)}")
 
     def maybe_spawn_vehicle(self, sim_time):
         # Ensure discovered; attempt discovery lazily if needed

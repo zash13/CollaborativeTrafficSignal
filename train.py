@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-
-# Assume your DQN agent is in path (adapt import as needed)
 from DQN.DQN_Agent import (
     AgentFactory,
     AgentType,
@@ -13,27 +11,29 @@ from sumo_env import SumoEnv
 import os
 
 
+EPOCHES = 100
+
+
 class Config:
-    SUMO_BINARY = os.environ.get("SUMO_BINARY", "sumo")  # Headless for training
+    SUMO_BINARY = os.environ.get("SUMO_BINARY", "sumo")
     NET_FILE = os.path.join(os.getcwd(), "my_4way.net.xml")
     ROUTE_FILE = os.path.join(os.getcwd(), "my_4way.rou.xml")
     SUMOCFG_FILE = os.path.join(os.getcwd(), "my_4way.sumocfg")
     SIM_STEP = 1.0
-    MAX_STEPS = 3600
-    MAX_VEHICLES = 200
+    MAX_STEPS = 600
+    MAX_VEHICLES = 50
     SPAWN_MIN_INTERVAL = 0.2
     SPAWN_MAX_INTERVAL = 2.0
     DEFAULT_SPEED = 13.89  # m/s (≈50km/h)
-    MIN_GREEN_TIME = 5.0  # Min seconds per green phase
+    MIN_GREEN_TIME = 5.0
     OBS_DIM = 20
 
 
-def train_dqn(env, num_episodes=100, max_steps_per_episode=Config.MAX_STEPS):
-    """Adapted from your Taxi train.py—integrates DQN with vector obs."""
-    action_size = len(env.phases)  # Discrete phases
+def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS):
+    action_size = len(env.phases)
     obs_dim = Config.OBS_DIM
     epsilon_min = 0.1
-    epsilon_decay = 0.995
+    epsilon_decay = 0.99
     ep_policy = EpsilonPolicy(
         epsilon_min=epsilon_min,
         epsilon_decay=epsilon_decay,
@@ -43,7 +43,7 @@ def train_dqn(env, num_episodes=100, max_steps_per_episode=Config.MAX_STEPS):
     agent = AgentFactory.create_agent(
         AgentType.DQN,
         action_size=action_size,
-        state_size=obs_dim,  # Vector dim
+        state_size=obs_dim,
         learning_rate=0.001,
         gamma=0.99,
         epsilon=1.0,
@@ -53,9 +53,12 @@ def train_dqn(env, num_episodes=100, max_steps_per_episode=Config.MAX_STEPS):
         epsilon_min=epsilon_min,
         epsilon_decay=epsilon_decay,
         epsilon_policy=ep_policy,
-        reward_policy=RewardPolicyType.ERM,
-        progress_bonus=0.05,
-        exploration_bonus=0.1,
+        reward_policy=RewardPolicyType.NONE,
+        fc1_units=64,
+        fc2_units=64,
+        update_target_network_method=UpdateTargetNetworkType.SOFT,
+        update_factor=0.005,
+        target_update_frequency=10,
     )
 
     rewards = []

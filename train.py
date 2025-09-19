@@ -16,8 +16,8 @@ EPOCHES = 100
 
 
 def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS):
-    action_size = len(env.phases)
-    obs_dim = Config.OBS_DIM
+    action_size = len(env.phases[env.tls_ids[0]])
+    obs_dim = env.obs_dim
     epsilon_min = 0.1
     epsilon_decay = 0.995
     ep_policy = EpsilonPolicy(
@@ -86,6 +86,6 @@ if __name__ == "__main__":
     if not os.path.exists(Config.NET_FILE):
         print(f"[ERROR] Net file not found: {Config.NET_FILE}")
         sys.exit(1)
-    env = SumoEnv()
+    env = SumoEnv(Config)
     rewards = train_dqn(env, num_episodes=EPOCHES)
     print("[INFO] Training complete.")

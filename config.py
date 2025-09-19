@@ -12,7 +12,7 @@ class Config:
     SPAWN_MIN_INTERVAL = 0.2
     SPAWN_MAX_INTERVAL = 2.0
     DEFAULT_SPEED = 13.89  # m/s (≈50km/h)
-    MIN_GREEN_TIME = 5.0
-    OBS_DIM = 72  # Adjusted for 24 lights (3 features each: vehicles, waiting, phase)
+    MIN_GREEN_TIME = 10.0
+    OBS_DIM = 36
     MAX_WAIT_EXPECTED = 300.0  # Maximum expected waiting time in seconds
     MAX_VEHICLES_PER_LANE = 10

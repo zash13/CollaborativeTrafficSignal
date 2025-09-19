@@ -40,7 +40,7 @@ class VehicleSpawner:
 
     def _discover_valid_routes(self):
         valid_routes = []
-        tls_ids = traci.trafficlight.getIDList()[:24]  # Limit to 24 traffic lights
+        tls_ids = traci.trafficlight.getIDList()  # Removed [:24] slicing
         for tls_id in tls_ids:
             node = self.net.getNode(tls_id)
             if node is None:
@@ -52,7 +52,7 @@ class VehicleSpawner:
                 dst = conn.getTo().getID()
                 if src in incoming_edges and dst in outgoing_edges:
                     valid_routes.append((src, dst))
-        print(f"[INFO] Discovered {len(valid_routes)} valid routes for 24 lights.")
+        print(f"[INFO] Discovered {len(valid_routes)} valid routes.")
         return valid_routes
 
     def maybe_spawn_vehicle(self, sim_time):
@@ -106,11 +106,7 @@ class SumoEnv:
             traci.start(sumo_cmd)
         except traci.exceptions.TraCIException as e:
             raise RuntimeError(f"Failed to start SUMO: {e}")
-        self.tls_ids = traci.trafficlight.getIDList()[:24]  # Limit to 24 traffic lights
-        if len(self.tls_ids) < 24:
-            print(
-                f"[WARN] Found {len(self.tls_ids)} traffic lights, expected 24. Proceeding with available lights."
-            )
+        self.tls_ids = traci.trafficlight.getIDList()  # Removed [:24] slicing
         self.phases = {
             tls_id: [
                 p.state
@@ -120,7 +116,7 @@ class SumoEnv:
             ]
             for tls_id in self.tls_ids
         }
-        self.lane_map = self._build_lane_map()  # Map TLS to controlled lanes
+        self.lane_map = self._build_lane_map()
         self.obs_dim = (
             sum(len(lanes) for lanes in self.lane_map.values()) * 3
         )  # 3 features per lane
@@ -131,6 +127,7 @@ class SumoEnv:
         self.sim_time = 0.0
         self.step_count = 0
         self.closed = False
+        self.last_total_waiting = 0.0  # Initialize for reward calculation
 
     def _build_lane_map(self):
         """Build a map of traffic lights to their controlled lanes."""
@@ -144,7 +141,7 @@ class SumoEnv:
             if lanes:
                 lane_map[tls_id] = list(lanes)
         print(f"[DEBUG] Lane map: {lane_map}")
-        return lane_map  # Return all mapped lanes, even if empty for some TLS
+        return lane_map
 
     def reset(self):
         """Reset the environment and return the initial observation."""
@@ -166,7 +163,7 @@ class SumoEnv:
             traci.start(sumo_cmd)
         except traci.exceptions.TraCIException as e:
             raise RuntimeError(f"Failed to start SUMO on reset: {e}")
-        self.tls_ids = traci.trafficlight.getIDList()[:24]
+        self.tls_ids = traci.trafficlight.getIDList()  # Removed [:24] slicing
         self.phases = {
             tls_id: [
                 p.state
@@ -181,6 +178,7 @@ class SumoEnv:
         self.spawner = VehicleSpawner(self.config)
         self.sim_time = 0.0
         self.step_count = 0
+        self.last_total_waiting = 0.0  # Reset waiting for new episode
         return self._build_obs()
 
     def _build_obs(self):
@@ -189,17 +187,19 @@ class SumoEnv:
         try:
             idx = 0
             for tls_id, lanes in self.lane_map.items():
+                current_phase = traci.trafficlight.getRedYellowGreenState(tls_id)
+                print(f"[DEBUG] TLS {tls_id} Phase State: {current_phase}")
                 for lane in lanes:
                     vehicles = traci.lane.getLastStepVehicleNumber(lane)
-                    waiting = traci.lane.getWaitingTime(lane)  # Seconds
+                    waiting = traci.lane.getWaitingTime(lane)
                     phase_idx = traci.trafficlight.getPhase(tls_id)
-                    normalized_vehicles = min(vehicles / self.config.MAX_VEHICLES, 1.0)
+                    normalized_vehicles = min(
+                        vehicles / self.config.MAX_VEHICLES_PER_LANE, 1.0
+                    )
                     normalized_waiting = min(
                         waiting / self.config.MAX_WAIT_EXPECTED, 1.0
                     )
-                    normalized_phase = phase_idx / len(
-                        self.phases.get(tls_id, [1])
-                    )  # Avoid division by zero
+                    normalized_phase = phase_idx / len(self.phases.get(tls_id, [1]))
                     vec[idx] = normalized_vehicles
                     vec[idx + 1] = normalized_waiting
                     vec[idx + 2] = normalized_phase
@@ -251,16 +251,23 @@ class SumoEnv:
 
         obs = self._build_obs()
         done = self.step_count >= self.config.MAX_STEPS
-        reward_components = []
-        for i in range(0, len(obs), 3):
-            vehicles_contrib = -float(obs[i])  # Normalized vehicles
-            waiting_contrib = -float(obs[i + 1])  # Normalized waiting
-            reward_components.extend([vehicles_contrib, waiting_contrib])
-        total_reward = sum(reward_components)
-        clipped_reward = np.clip(total_reward, -10.0, 0.0)
+        current_waiting = sum(
+            traci.lane.getWaitingTime(lane)
+            for lanes in self.lane_map.values()
+            for lane in lanes
+        )
+
+        # Reward is improvement in waiting
+        reward = self.last_total_waiting - current_waiting
+
+        # Alternative: reward vehicles that left the network
+        reward += traci.simulation.getArrivedNumber()
+
+        self.last_total_waiting = current_waiting
+        clipped_reward = np.clip(reward, -10.0, 10.0)
         print(
-            f"[DEBUG] Reward components per lane: {reward_components}, "
-            f"Total={total_reward:.3f}, Clipped={clipped_reward:.3f}"
+            f"[DEBUG] Reward components per lane: {[-float(obs[i]) for i in range(0, len(obs), 3)] + [-float(obs[i + 1]) for i in range(1, len(obs), 3)]}, "
+            f"Waiting Diff={reward:.3f}, Clipped={clipped_reward:.3f}"
         )
         info = {"time": self.sim_time, "active_vehicles": self.spawner.active_vehicles}
         return obs, clipped_reward, done, info

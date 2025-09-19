@@ -13,6 +13,5 @@ class Config:
     SPAWN_MAX_INTERVAL = 2.0
     DEFAULT_SPEED = 13.89  # m/s (≈50km/h)
     MIN_GREEN_TIME = 10.0
-    OBS_DIM = 36
-    MAX_WAIT_EXPECTED = 300.0  # Maximum expected waiting time in seconds
+    MAX_WAIT_EXPECTED = 200.0  # Maximum expected waiting time in seconds
     MAX_VEHICLES_PER_LANE = 10

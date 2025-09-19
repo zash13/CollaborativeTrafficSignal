@@ -15,3 +15,4 @@ class Config:
     MIN_GREEN_TIME = 5.0
     OBS_DIM = 72  # Adjusted for 24 lights (3 features each: vehicles, waiting, phase)
     MAX_WAIT_EXPECTED = 300.0  # Maximum expected waiting time in seconds
+    MAX_VEHICLES_PER_LANE = 10

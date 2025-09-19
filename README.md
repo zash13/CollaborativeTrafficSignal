@@ -118,3 +118,67 @@ Adjust these parameters in `train.py` to tune the agent's performance based on y
 
 - The DQN agent still needs improvement, especially in the **reward policies** and **epsilon decay strategy**.  
   I'm happy to collaborate so feel free to contribute to these repositories!
+
+---
+
+---
+
+# Quick Guide: Build Your Own SUMO Network
+
+This section provides a brief overview of how to quickly set up and simulate your own traffic network using SUMO.
+
+---
+
+## Installation
+
+1. Install **SUMO**, **SUMO-GUI**, and **netedit**.
+2. Installation methods vary depending on your Linux distribution.
+3. Ensure the following tools are available:
+   - `sumo`
+   - `sumo-gui`
+   - `netedit`
+
+---
+
+## building the network with netedit
+
+1. open **netedit**.
+2. enable the **grid**.
+3. use **edge mode** to draw your routes.
+4. right-click on edges to:
+   - change the number of lanes.
+   - reverse direction if needed.
+5. switch to **connection mode** to define connections.
+6. use **traffic light mode** to add traffic lights (tls).
+
+---
+
+## Running the Simulation
+
+Set up your environment variables:
+
+```bash
+export SUMO_HOME=/path/to/sumo  # Replace with your actual SUMO installation path or builded repo !
+export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
+```
+
+- Generate random trips:
+
+```bash
+  python $SUMO_HOME/tools/randomTrips.py -n your_network.net.xml -r your_routes.rou.xml -e 100 --period 10 --seed 42
+```
+
+- use sumo-gui to visualize your network.
+  -To add vehicles:
+  Write a test script or use available libraries.
+
+- once your network is ready, complete your sumo_env and run your agent.
+- Before running full simulations, double-check your parameters:
+
+      .Reward functions
+
+      .Action definitions
+
+      .Environment settings
+
+this will save you a lot of time and effort later on!

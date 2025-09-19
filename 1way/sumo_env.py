@@ -4,7 +4,7 @@ SUMO environment compatible with train.py (DQN) for 1-way network.
 - Provides reset() returning a numpy observation vector.
 - step(action) -> (next_obs: np.ndarray, reward: float, done: bool, info: dict)
 - Uses sumolib for topology and traci for runtime.
-- Configured for GUI visualization and runs for at least 1 minute with random actions.
+- Configured for non-GUI mode for training efficiency.
 """
 
 import os
@@ -30,19 +30,21 @@ except Exception as e:
 
 
 class Config:
-    # SUMO binary set to GUI for visualization
-    SUMO_BINARY = os.environ.get("SUMO_BINARY", "sumo-gui")
+    SUMO_BINARY = os.environ.get("SUMO_BINARY", "sumo")
     NET_FILE = os.path.join(os.getcwd(), "1way.net.xml")
     ROUTE_FILE = os.path.join(os.getcwd(), "1way.rou.xml")
     SUMOCFG_FILE = os.path.join(os.getcwd(), "1way.sumocfg")
     SIM_STEP = 1.0
-    MAX_STEPS = 3600
-    MAX_VEHICLES = 200
+    MAX_STEPS = 600
+    MAX_VEHICLES = 10
     SPAWN_MIN_INTERVAL = 0.2
     SPAWN_MAX_INTERVAL = 2.0
     DEFAULT_SPEED = 13.89  # m/s (≈50 km/h)
-    # OBSERVATION vector dimension: vehicle count + waiting + phase one-hot (3 phases)
     OBS_DIM = 6
+    MAX_VEHICLE_EXPECTED = 50  # For normalization
+    MAX_WAIT_EXPECTED = 300.0  # Seconds, for normalization
+    WEIGHT_WAIT = 0.5
+    WEIGHT_CARS = 0.5
 
 
 def ensure_minimal_sumocfg():
@@ -155,7 +157,6 @@ class SumoEnv:
             "--no-warnings",
             "--step-length",
             str(Config.SIM_STEP),
-            "--start",  # Auto-start the GUI
         ]
         traci.start(sumo_cmd)
         tls_ids = traci.trafficlight.getIDList()
@@ -189,7 +190,6 @@ class SumoEnv:
             "--no-warnings",
             "--step-length",
             str(Config.SIM_STEP),
-            "--start",
         ]
         traci.start(sumo_cmd)
         tls_ids = traci.trafficlight.getIDList()
@@ -212,11 +212,11 @@ class SumoEnv:
                 self.spawner.incoming_edges[0] if self.spawner.incoming_edges else "E0"
             )
             vehicles = traci.edge.getLastStepVehicleNumber(src)
-            waiting = traci.edge.getWaitingTime(src) / 60.0  # Normalized to minutes
+            waiting = traci.edge.getWaitingTime(src)  # Seconds
             phase_idx = traci.trafficlight.getPhase(self.tls_id)
             phase_onehot = np.eye(len(self.phases))[phase_idx]
             vec[0] = vehicles
-            vec[1] = waiting
+            vec[1] = waiting  # Seconds
             vec[2 : 2 + len(phase_onehot)] = phase_onehot
         except Exception as e:
             print(f"[WARN] Observation error: {e}")
@@ -265,10 +265,13 @@ class SumoEnv:
 
         obs = self._build_obs()
         done = self.step_count >= Config.MAX_STEPS
-        vehicles = obs[0]
-        waiting = obs[1]
-        reward = -(vehicles + waiting)
-        print(f"v :{vehicles} w:{waiting} r: {reward}")
+        wait_seconds = obs[1]
+        num_cars = obs[0]
+        w1 = Config.WEIGHT_WAIT
+        w2 = Config.WEIGHT_CARS
+        reward = -(w1 * wait_seconds + w2 * num_cars)
+        reward = np.clip(reward, -20.0, 0.0)  # Clip to prevent extremes
+        print(f"[INFO] here is v: {num_cars}, w: {wait_seconds}, r: {reward}")
         info = {"time": self.sim_time, "active_vehicles": self.spawner.active_vehicles}
         return obs, reward, done, info
 
@@ -282,7 +285,6 @@ class SumoEnv:
         self.closed = True
 
 
-# Manual run with random actions for visualization, running for at least 1 minute
 if __name__ == "__main__":
     if not os.path.exists(Config.NET_FILE):
         print(f"[ERROR] Net file not found: {Config.NET_FILE}")
@@ -302,7 +304,7 @@ if __name__ == "__main__":
             if done:
                 print("Simulation done due to max steps.")
                 break
-            time.sleep(1.0)  # 1-second delay for 1-minute total runtime
+            time.sleep(1.0)
         print(f"Simulation ran for {target_steps} steps (~{target_steps}s).")
     except KeyboardInterrupt:
         print("\nSimulation interrupted by user.")

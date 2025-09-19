@@ -4,3 +4,6 @@
 [submodule "DQN"]
 	path = DQN
 	url = https://github.com/zash13/DQN_Agent.git
+[submodule "1way/DQN"]
+	path = 1way/DQN
+	url = https://github.com/zash13/DQN_Agent.git

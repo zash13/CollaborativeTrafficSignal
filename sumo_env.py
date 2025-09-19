@@ -1,17 +1,15 @@
-#!/usr/bin/env python3
 """
 SUMO environment compatible with train.py (DQN).
 - Provides reset() returning a numpy observation vector.
 - step(action) -> (next_obs: np.ndarray, reward: float, done: bool, info: dict)
 - Uses sumolib for topology and traci for runtime.
+- Includes detailed debug logging for per-lane vehicle counts and waiting times.
 """
-# This code was completely written using GPT
 
 import os
 import random
 import sys
 import time
-
 import numpy as np
 
 try:
@@ -28,105 +26,46 @@ except Exception as e:
         "sumolib import failed. Install with `pip install sumolib` or ensure SUMO tools are available."
     ) from e
 
-
-class Config:
-    # SUMO binary (use env SUMO_BINARY to override)
-    SUMO_BINARY = os.environ.get("SUMO_BINARY", "sumo")
-    NET_FILE = os.path.join(os.getcwd(), "my_4way.net.xml")
-    ROUTE_FILE = os.path.join(os.getcwd(), "my_4way.rou.xml")
-    SUMOCFG_FILE = os.path.join(os.getcwd(), "my_4way.sumocfg")
-    SIM_STEP = 1.0
-    MAX_STEPS = 3600
-    MAX_VEHICLES = 200
-    SPAWN_MIN_INTERVAL = 0.2
-    SPAWN_MAX_INTERVAL = 2.0
-    DEFAULT_SPEED = 13.89  # m/s (≈50 km/h)
-    # OBSERVATION vector dimension expected by your agent (train.py uses 20)
-    OBS_DIM = 20
-
-
-def ensure_minimal_sumocfg():
-    """Create minimal route and sumocfg files if missing."""
-    if not os.path.exists(Config.ROUTE_FILE):
-        with open(Config.ROUTE_FILE, "w") as f:
-            f.write('<?xml version="1.0"?>\n<routes>\n</routes>\n')
-        print(f"[INFO] Created empty route file: {Config.ROUTE_FILE}")
-
-    if not os.path.exists(Config.SUMOCFG_FILE):
-        cfg = f"""<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <input>
-        <net-file value="{Config.NET_FILE}"/>
-        <route-files value="{Config.ROUTE_FILE}"/>
-    </input>
-    <time>
-        <begin value="0"/>
-        <end value="{Config.MAX_STEPS}"/>
-        <step-length value="{Config.SIM_STEP}"/>
-    </time>
-</configuration>
-"""
-        with open(Config.SUMOCFG_FILE, "w") as f:
-            f.write(cfg)
-        print(f"[INFO] Created minimal sumocfg: {Config.SUMOCFG_FILE}")
+from config import Config
 
 
 class VehicleSpawner:
-    def __init__(self, net_path, center_tls_id=None):
-        self.net = sumolib.net.readNet(net_path)
-        self.center_tls_id = center_tls_id
-        self.tls_node = None
+    """Handles spawning of vehicles along valid routes."""
+
+    def __init__(self, config):
+        self.net = sumolib.net.readNet(config.NET_FILE)
         self.last_spawn_time = -9999.0
         self.active_vehicles = 0
-        self.incoming_edges = []
-        self.outgoing_edges = []
-        self.valid_routes = []
+        self.valid_routes = self._discover_valid_routes()
 
-    def _discover_center_junction(self):
-        tls_ids = traci.trafficlight.getIDList()
-        if not tls_ids:
-            raise RuntimeError("No traffic lights found in running SUMO instance.")
-        selected_tls = (
-            self.center_tls_id
-            if (self.center_tls_id and self.center_tls_id in tls_ids)
-            else tls_ids[0]
-        )
-        try:
-            node = self.net.getNode(selected_tls)
-        except KeyError:
-            raise RuntimeError(f"TLS id '{selected_tls}' not found in net file.")
-        self.tls_node = node
-        self.incoming_edges = [e.getID() for e in node.getIncoming()]
-        self.outgoing_edges = [e.getID() for e in node.getOutgoing()]
-        if not self.incoming_edges:
-            raise RuntimeError(f"No incoming edges found for TLS '{selected_tls}'.")
-        # Build valid routes: edge->edge connections through the junction
-        self.valid_routes = []
-        for conn in node.getConnections():
-            try:
+    def _discover_valid_routes(self):
+        valid_routes = []
+        tls_ids = traci.trafficlight.getIDList()[:24]  # Limit to 24 traffic lights
+        for tls_id in tls_ids:
+            node = self.net.getNode(tls_id)
+            if node is None:
+                continue
+            incoming_edges = [e.getID() for e in node.getIncoming()]
+            outgoing_edges = [e.getID() for e in node.getOutgoing()]
+            for conn in node.getConnections():
                 src = conn.getFrom().getID()
                 dst = conn.getTo().getID()
-            except Exception:
-                continue
-            if src in self.incoming_edges and dst in self.outgoing_edges:
-                self.valid_routes.append((src, dst))
+                if src in incoming_edges and dst in outgoing_edges:
+                    valid_routes.append((src, dst))
+        print(f"[INFO] Discovered {len(valid_routes)} valid routes for 24 lights.")
+        return valid_routes
 
     def maybe_spawn_vehicle(self, sim_time):
-        # Ensure discovered; attempt discovery lazily if needed
-        if not self.tls_node:
-            try:
-                self._discover_center_junction()
-            except Exception:
-                return False
-
+        """Spawn a vehicle if allowed by interval and max vehicles."""
         if (sim_time - self.last_spawn_time) < random.uniform(
             Config.SPAWN_MIN_INTERVAL, Config.SPAWN_MAX_INTERVAL
         ):
             return False
         if self.active_vehicles >= Config.MAX_VEHICLES:
             return False
+
         if not self.valid_routes:
-            # nothing valid to spawn
+            print("[WARN] No valid routes available.")
             return False
 
         src, dst = random.choice(self.valid_routes)
@@ -135,104 +74,144 @@ class VehicleSpawner:
         try:
             traci.route.add(route_id, [src, dst])
             traci.vehicle.add(veh_id, routeID=route_id, typeID="DEFAULT_VEHTYPE")
+            for lane in range(traci.edge.getLaneNumber(src)):
+                traci.lane.setMaxSpeed(f"{src}_{lane}", Config.DEFAULT_SPEED)
+            self.last_spawn_time = sim_time
+            self.active_vehicles += 1
+            print(f"[DEBUG] Spawned vehicle {veh_id} on route {src} -> {dst}")
+            return True
         except traci.exceptions.TraCIException as e:
-            print(f"[WARN] Failed to add vehicle/route: {e}")
+            print(f"[WARN] Failed to spawn vehicle: {e}")
             return False
 
-        # set lane speed best-effort
-        try:
-            lane_count = traci.edge.getLaneNumber(src)
-            for li in range(lane_count):
-                traci.lane.setMaxSpeed(f"{src}_{li}", Config.DEFAULT_SPEED)
-        except Exception:
-            pass
-
-        self.last_spawn_time = sim_time
-        self.active_vehicles += 1
-        return True
-
     def on_vehicle_removed(self):
+        """Decrement active vehicle count when a vehicle is removed."""
         self.active_vehicles = max(0, self.active_vehicles - 1)
 
 
 class SumoEnv:
-    def __init__(self, sumo_binary=None, net_file=None, sumocfg=None, obs_dim=None):
-        self.sumocfg = sumocfg or Config.SUMOCFG_FILE
-        self.net_file = net_file or Config.NET_FILE
-        self.sumo_binary = sumo_binary or Config.SUMO_BINARY
-        self.closed = False
-        self.obs_dim = obs_dim or Config.OBS_DIM
+    """SUMO environment for DQN training with per-lane debugging."""
 
-        ensure_minimal_sumocfg()
-        self._start_sumo_and_init()
-
-    def _start_sumo_and_init(self):
-        cmd = [
-            self.sumo_binary,
+    def __init__(self, config):
+        self.config = config
+        sumo_cmd = [
+            self.config.SUMO_BINARY,
             "-c",
-            self.sumocfg,
-            "--step-length",
-            str(Config.SIM_STEP),
-            "--start",
+            self.config.SUMOCFG_FILE,
             "--no-warnings",
+            "--step-length",
+            str(self.config.SIM_STEP),
         ]
-        print("[INFO] Starting SUMO with command:", " ".join(cmd))
         try:
-            traci.start(cmd)
-        except Exception as e:
-            raise RuntimeError(f"Failed to start SUMO: {e}") from e
-
-        tls_ids = traci.trafficlight.getIDList()
-        if not tls_ids:
-            raise RuntimeError("No traffic lights after SUMO start.")
-        self.tls_id = tls_ids[0]
-        logic = traci.trafficlight.getCompleteRedYellowGreenDefinition(self.tls_id)[0]
-        self.phases = [p.state for p in logic.phases]
-        print(f"[INFO] TLS '{self.tls_id}' phases loaded: {len(self.phases)} phases.")
-
-        self.spawner = VehicleSpawner(self.net_file, center_tls_id=self.tls_id)
-        # discover mapping now (so valid_routes available)
-        try:
-            self.spawner._discover_center_junction()
-        except Exception as e:
-            # warn but continue
-            print(f"[WARN] Spawner discovery warning: {e}")
-
+            traci.start(sumo_cmd)
+        except traci.exceptions.TraCIException as e:
+            raise RuntimeError(f"Failed to start SUMO: {e}")
+        self.tls_ids = traci.trafficlight.getIDList()[:24]  # Limit to 24 traffic lights
+        if len(self.tls_ids) < 24:
+            print(
+                f"[WARN] Found {len(self.tls_ids)} traffic lights, expected 24. Proceeding with available lights."
+            )
+        self.phases = {
+            tls_id: [
+                p.state
+                for p in traci.trafficlight.getCompleteRedYellowGreenDefinition(tls_id)[
+                    0
+                ].phases
+            ]
+            for tls_id in self.tls_ids
+        }
+        self.lane_map = self._build_lane_map()  # Map TLS to controlled lanes
+        self.obs_dim = (
+            sum(len(lanes) for lanes in self.lane_map.values()) * 3
+        )  # 3 features per lane
+        print(
+            f"[INFO] Loaded {len(self.tls_ids)} traffic lights, {self.obs_dim} observation dimensions based on {sum(len(lanes) for lanes in self.lane_map.values())} unique lanes."
+        )
+        self.spawner = VehicleSpawner(self.config)
         self.sim_time = 0.0
         self.step_count = 0
+        self.closed = False
+
+    def _build_lane_map(self):
+        """Build a map of traffic lights to their controlled lanes."""
+        lane_map = {}
+        for tls_id in self.tls_ids:
+            controlled_links = traci.trafficlight.getControlledLinks(tls_id)
+            lanes = set()
+            for link in controlled_links:
+                if link and link[0]:  # Ensure link and incoming lane exist
+                    lanes.add(link[0][0])  # Add incoming lane ID
+            if lanes:
+                lane_map[tls_id] = list(lanes)
+        print(f"[DEBUG] Lane map: {lane_map}")
+        return lane_map  # Return all mapped lanes, even if empty for some TLS
 
     def reset(self):
-        """Reset the SUMO simulation and return initial observation vector (numpy)."""
-        # close existing SUMO instance if open
+        """Reset the environment and return the initial observation."""
+        if self.closed:
+            raise RuntimeError("Environment is closed; cannot reset.")
         try:
             traci.close()
         except Exception:
             pass
-
-        # restart SUMO cleanly
-        self.closed = False
-        self._start_sumo_and_init()
-
-        # return initial observation
-        obs = self._build_obs()
-        return obs
+        sumo_cmd = [
+            self.config.SUMO_BINARY,
+            "-c",
+            self.config.SUMOCFG_FILE,
+            "--no-warnings",
+            "--step-length",
+            str(self.config.SIM_STEP),
+        ]
+        try:
+            traci.start(sumo_cmd)
+        except traci.exceptions.TraCIException as e:
+            raise RuntimeError(f"Failed to start SUMO on reset: {e}")
+        self.tls_ids = traci.trafficlight.getIDList()[:24]
+        self.phases = {
+            tls_id: [
+                p.state
+                for p in traci.trafficlight.getCompleteRedYellowGreenDefinition(tls_id)[
+                    0
+                ].phases
+            ]
+            for tls_id in self.tls_ids
+        }
+        self.lane_map = self._build_lane_map()
+        self.obs_dim = sum(len(lanes) for lanes in self.lane_map.values()) * 3
+        self.spawner = VehicleSpawner(self.config)
+        self.sim_time = 0.0
+        self.step_count = 0
+        return self._build_obs()
 
     def _build_obs(self):
-        """
-        Build an OBS_DIM vector:
-          - first K = len(incoming_edges) entries: vehicle counts on incoming edges
-          - next entries: zeros (padding) up to OBS_DIM
-        """
+        """Build observation vector with per-lane data and debug output."""
         vec = np.zeros(self.obs_dim, dtype=np.float32)
         try:
-            incoming = self.spawner.incoming_edges
-            for i, e in enumerate(incoming):
-                if i >= self.obs_dim:
-                    break
-                vec[i] = float(traci.edge.getLastStepVehicleNumber(e))
-        except Exception:
-            # if traci fails, keep zeros
-            pass
+            idx = 0
+            for tls_id, lanes in self.lane_map.items():
+                for lane in lanes:
+                    vehicles = traci.lane.getLastStepVehicleNumber(lane)
+                    waiting = traci.lane.getWaitingTime(lane)  # Seconds
+                    phase_idx = traci.trafficlight.getPhase(tls_id)
+                    normalized_vehicles = min(vehicles / self.config.MAX_VEHICLES, 1.0)
+                    normalized_waiting = min(
+                        waiting / self.config.MAX_WAIT_EXPECTED, 1.0
+                    )
+                    normalized_phase = phase_idx / len(
+                        self.phases.get(tls_id, [1])
+                    )  # Avoid division by zero
+                    vec[idx] = normalized_vehicles
+                    vec[idx + 1] = normalized_waiting
+                    vec[idx + 2] = normalized_phase
+                    print(
+                        f"[DEBUG] TLS {tls_id}, Lane {lane}: "
+                        f"Vehicles={vehicles} (norm={normalized_vehicles:.3f}), "
+                        f"Waiting={waiting:.1f}s (norm={normalized_waiting:.3f}), "
+                        f"Phase={phase_idx} (norm={normalized_phase:.3f})"
+                    )
+                    idx += 3
+        except Exception as e:
+            print(f"[WARN] Observation error: {e}")
         return vec
 
     def step(self, action=None):
@@ -240,21 +219,20 @@ class SumoEnv:
             raise RuntimeError("Environment is closed; cannot step.")
 
         if action is not None:
-            if not (0 <= action < len(self.phases)):
-                raise ValueError("Action out of range.")
-            try:
-                traci.trafficlight.setRedYellowGreenState(
-                    self.tls_id, self.phases[action]
-                )
-            except traci.exceptions.TraCIException as e:
-                print(f"[WARN] Failed to set TLS state: {e}")
+            for tls_id in self.tls_ids:
+                if 0 <= action < len(self.phases.get(tls_id, [])):
+                    try:
+                        traci.trafficlight.setRedYellowGreenState(
+                            tls_id, self.phases[tls_id][action]
+                        )
+                    except traci.exceptions.TraCIException as e:
+                        print(f"[WARN] Failed to set TLS state for {tls_id}: {e}")
 
+        self.spawner.maybe_spawn_vehicle(self.sim_time)
         try:
-            # try to spawn and step
-            self.spawner.maybe_spawn_vehicle(self.sim_time)
             traci.simulationStep()
         except traci.exceptions.FatalTraCIError as e:
-            print(f"[ERROR] SUMO connection closed during simulationStep: {e}")
+            print(f"[ERROR] SUMO connection closed: {e}")
             self.closed = True
             return (
                 np.zeros(self.obs_dim, dtype=np.float32),
@@ -262,25 +240,30 @@ class SumoEnv:
                 True,
                 {"error": str(e)},
             )
-        except traci.exceptions.TraCIException as e:
-            print(f"[WARN] TraCI exception during step: {e}")
 
-        self.sim_time += Config.SIM_STEP
+        self.sim_time += self.config.SIM_STEP
         self.step_count += 1
 
-        # update removed vehicles
-        try:
-            for vid in list(traci.vehicle.getIDList()):
-                if traci.vehicle.getRoadID(vid) == "":
-                    self.spawner.on_vehicle_removed()
-        except Exception:
-            pass
+        # Remove finished vehicles
+        for vid in list(traci.vehicle.getIDList()):
+            if traci.vehicle.getRoadID(vid) == "":
+                self.spawner.on_vehicle_removed()
 
         obs = self._build_obs()
-        done = self.step_count >= Config.MAX_STEPS
-        reward = -float(np.sum(obs))  # simple negative total vehicles on incoming edges
+        done = self.step_count >= self.config.MAX_STEPS
+        reward_components = []
+        for i in range(0, len(obs), 3):
+            vehicles_contrib = -float(obs[i])  # Normalized vehicles
+            waiting_contrib = -float(obs[i + 1])  # Normalized waiting
+            reward_components.extend([vehicles_contrib, waiting_contrib])
+        total_reward = sum(reward_components)
+        clipped_reward = np.clip(total_reward, -10.0, 0.0)
+        print(
+            f"[DEBUG] Reward components per lane: {reward_components}, "
+            f"Total={total_reward:.3f}, Clipped={clipped_reward:.3f}"
+        )
         info = {"time": self.sim_time, "active_vehicles": self.spawner.active_vehicles}
-        return obs, reward, done, info
+        return obs, clipped_reward, done, info
 
     def close(self):
         if self.closed:
@@ -292,21 +275,24 @@ class SumoEnv:
         self.closed = True
 
 
-# Quick manual run for sanity (kept minimal)
+# Quick test main
 if __name__ == "__main__":
     if not os.path.exists(Config.NET_FILE):
         print(f"[ERROR] Net file not found: {Config.NET_FILE}")
         sys.exit(1)
-
-    env = SumoEnv()
-    obs = env.reset()
-    print("Initial obs vector:", obs)
-    for i in range(10):
-        action = random.randint(0, max(0, len(env.phases) - 1))
-        obs, reward, done, info = env.step(action)
-        print(
-            f"step {i} action={action} reward={reward} active={info.get('active_vehicles')}"
-        )
-        if done:
-            break
-    env.close()
+    try:
+        env = SumoEnv(Config)
+        obs = env.reset()
+        print("Initial obs vector:", obs)
+        for i in range(10):
+            action = random.randint(
+                0, max(0, len(env.phases.get(env.tls_ids[0], [])) - 1)
+            )
+            obs, reward, done, info = env.step(action)
+            print(
+                f"step {i} action={action} reward={reward:.3f} active={info.get('active_vehicles')}"
+            )
+            if done:
+                break
+    except Exception as e:
+        print(f"[ERROR] Simulation failed: {e}")

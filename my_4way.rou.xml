@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2025-09-16 00:52:10.988904 by randomTrips.py v1_24_0+0078-dbeacafec2b
+<!-- generated on 2025-09-19 23:59:38.095222 by Eclipse SUMO randomTrips.py v1_24_0+0847-9edee8d0c56
 <configuration>
     <net-file value="my_4way.net.xml"/>
     <route-file value="my_4way.rou.xml"/>
@@ -9,7 +9,7 @@
 </configuration>
 -->
 
-<!-- generated on 2025-09-16 00:52:10 by Eclipse SUMO duarouter Version v1_24_0+0078-dbeacafec2b
+<!-- generated on 2025-09-19T23:59:38.092250+03:30 by Eclipse SUMO duarouter UNKNOWN
 <duarouterConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/duarouterConfiguration.xsd">
 
     <input>

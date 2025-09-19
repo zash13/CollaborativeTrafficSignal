@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2025-09-16 00:52:10.956786 by randomTrips.py v1_24_0+0078-dbeacafec2b
+<!-- generated on 2025-09-19 23:59:38.048661 by Eclipse SUMO randomTrips.py v1_24_0+0847-9edee8d0c56
 <configuration>
     <net-file value="my_4way.net.xml"/>
     <route-file value="my_4way.rou.xml"/>

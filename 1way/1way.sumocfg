@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <input>
+        <net-file value="/home/kk_gorbee/Documents/project/ML/CollaborativeTrafficSignal/1way/1way.net.xml"/>
+        <route-files value="/home/kk_gorbee/Documents/project/ML/CollaborativeTrafficSignal/1way/1way.rou.xml"/>
+    </input>
+    <time>
+        <begin value="0"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
+    </time>
+</configuration>

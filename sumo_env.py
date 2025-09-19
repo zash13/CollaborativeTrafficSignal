@@ -28,6 +28,8 @@ except Exception as e:
 
 from config import Config
 
+SHOW_LOG = False
+
 
 class VehicleSpawner:
     """Handles spawning of vehicles along valid routes."""
@@ -78,7 +80,8 @@ class VehicleSpawner:
                 traci.lane.setMaxSpeed(f"{src}_{lane}", Config.DEFAULT_SPEED)
             self.last_spawn_time = sim_time
             self.active_vehicles += 1
-            print(f"[DEBUG] Spawned vehicle {veh_id} on route {src} -> {dst}")
+            if SHOW_LOG:
+                print(f"[DEBUG] Spawned vehicle {veh_id} on route {src} -> {dst}")
             return True
         except traci.exceptions.TraCIException as e:
             print(f"[WARN] Failed to spawn vehicle: {e}")
@@ -140,7 +143,8 @@ class SumoEnv:
                     lanes.add(link[0][0])  # Add incoming lane ID
             if lanes:
                 lane_map[tls_id] = list(lanes)
-        print(f"[DEBUG] Lane map: {lane_map}")
+        if SHOW_LOG:
+            print(f"[DEBUG] Lane map: {lane_map}")
         return lane_map
 
     def reset(self):
@@ -188,7 +192,8 @@ class SumoEnv:
             idx = 0
             for tls_id, lanes in self.lane_map.items():
                 current_phase = traci.trafficlight.getRedYellowGreenState(tls_id)
-                print(f"[DEBUG] TLS {tls_id} Phase State: {current_phase}")
+                if SHOW_LOG:
+                    print(f"[DEBUG] TLS {tls_id} Phase State: {current_phase}")
                 for lane in lanes:
                     vehicles = traci.lane.getLastStepVehicleNumber(lane)
                     waiting = traci.lane.getWaitingTime(lane)
@@ -203,12 +208,13 @@ class SumoEnv:
                     vec[idx] = normalized_vehicles
                     vec[idx + 1] = normalized_waiting
                     vec[idx + 2] = normalized_phase
-                    print(
-                        f"[DEBUG] TLS {tls_id}, Lane {lane}: "
-                        f"Vehicles={vehicles} (norm={normalized_vehicles:.3f}), "
-                        f"Waiting={waiting:.1f}s (norm={normalized_waiting:.3f}), "
-                        f"Phase={phase_idx} (norm={normalized_phase:.3f})"
-                    )
+                    if SHOW_LOG:
+                        print(
+                            f"[DEBUG] TLS {tls_id}, Lane {lane}: "
+                            f"Vehicles={vehicles} (norm={normalized_vehicles:.3f}), "
+                            f"Waiting={waiting:.1f}s (norm={normalized_waiting:.3f}), "
+                            f"Phase={phase_idx} (norm={normalized_phase:.3f})"
+                        )
                     idx += 3
         except Exception as e:
             print(f"[WARN] Observation error: {e}")
@@ -265,10 +271,11 @@ class SumoEnv:
 
         self.last_total_waiting = current_waiting
         clipped_reward = np.clip(reward, -10.0, 10.0)
-        print(
-            f"[DEBUG] Reward components per lane: {[-float(obs[i]) for i in range(0, len(obs), 3)] + [-float(obs[i + 1]) for i in range(1, len(obs), 3)]}, "
-            f"Waiting Diff={reward:.3f}, Clipped={clipped_reward:.3f}"
-        )
+        if SHOW_LOG:
+            print(
+                f"[DEBUG] Reward components per lane: {[-float(obs[i]) for i in range(0, len(obs), 3)] + [-float(obs[i + 1]) for i in range(1, len(obs), 3)]}, "
+                f"Waiting Diff={reward:.3f}, Clipped={clipped_reward:.3f}"
+            )
         info = {"time": self.sim_time, "active_vehicles": self.spawner.active_vehicles}
         return obs, clipped_reward, done, info
 

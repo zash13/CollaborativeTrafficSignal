@@ -12,7 +12,7 @@ import sys
 from sumo_env import SumoEnv  # Import after Config definition
 from config import Config
 
-EPOCHES = 100
+EPOCHES = 1
 
 
 def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS):
@@ -78,7 +78,8 @@ def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS)
     plt.ylabel("Total Reward")
     plt.title("DQN Training on 4-Way SUMO Intersection")
     plt.show()
-    agent.save("checkpoints/dqn_final")
+    os.makedirs("checkpoints/v1", exist_ok=True)
+    agent.save("checkpoints/v1/model.keras")
     return rewards
 
 

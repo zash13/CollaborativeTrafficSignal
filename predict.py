@@ -6,7 +6,7 @@ from DQN.DQN_Agent import AgentFactory, AgentType
 from sumo_env import SumoEnv
 from config import Config
 
-CHECKPOINT_PATH = "checkpoints/v1/model.keras"
+CHECKPOINT_BASE = "checkpoints/v2/model"
 
 
 def run_prediction(env, num_episodes=1, max_steps_per_episode=Config.MAX_STEPS):
@@ -14,7 +14,7 @@ def run_prediction(env, num_episodes=1, max_steps_per_episode=Config.MAX_STEPS):
     obs_dim = env.obs_dim
 
     agent = AgentFactory.create_agent(
-        AgentType.DQN,
+        AgentType.DUELING_DQN,
         action_size=action_size,
         state_size=obs_dim,
         learning_rate=0.0001,
@@ -34,12 +34,19 @@ def run_prediction(env, num_episodes=1, max_steps_per_episode=Config.MAX_STEPS):
         target_update_frequency=50,
     )
 
-    if not os.path.exists(CHECKPOINT_PATH):
-        print(f"[ERROR] Model file not found: {CHECKPOINT_PATH}")
-        sys.exit(1)
+    required_files = [
+        CHECKPOINT_BASE + "_online.keras",
+        CHECKPOINT_BASE + "_target.keras",
+        CHECKPOINT_BASE + "_meta.json",
+    ]
+    for f in required_files:
+        if not os.path.exists(f):
+            print(f"[error] missing checkpoint file: {f}")
+            sys.exit(1)
 
-    agent.load(CHECKPOINT_PATH)
-    print(f"[INFO] Loaded model from {CHECKPOINT_PATH}")
+    # Load from checkpoint
+    agent.load(CHECKPOINT_BASE)
+    print(f"[INFO] Loaded model from {CHECKPOINT_BASE}")
 
     for episode in range(num_episodes):
         obs = env.reset()
@@ -68,4 +75,4 @@ if __name__ == "__main__":
         sys.exit(1)
 
     env = SumoEnv(Config)
-    run_prediction(env, num_episodes=1)  # change num_episodes if you want more
+    run_prediction(env, num_episodes=1)

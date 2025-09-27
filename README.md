@@ -170,7 +170,7 @@ export PATH=$SUMO_HOME/bin:$PATH .
   python $SUMO_HOME/tools/randomTrips.py -n your_network.net.xml -r your_routes.rou.xml -e 100 --period 10 --seed 42
 ```
 
-- use **sumo-gui** to visualize your network.
+- use `sumo-gui` to visualize your network.
   -To add vehicles:
   Write a test script or use available libraries.
 
@@ -184,4 +184,4 @@ export PATH=$SUMO_HOME/bin:$PATH .
       .Environment settings
 
 this will save you a lot of time and effort later on!
-After creating your simulation, make sure to update the **config.py** file so the model works with your network
+After creating your simulation, make sure to update the `config.py` file so the model works with your network

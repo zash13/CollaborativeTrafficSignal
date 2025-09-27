@@ -1,6 +1,7 @@
 """
 Simple test for SumoEnv to check if the simulation runs correctly.
 No testing libraries, just prints info about environment behavior.
+This code was completely written by GPT
 """
 
 import random

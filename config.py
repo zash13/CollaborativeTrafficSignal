@@ -3,9 +3,9 @@ import os
 
 class Config:
     SUMO_BINARY = os.environ.get("SUMO_BINARY", "sumo-gui")
-    NET_FILE = os.path.join(os.getcwd(), "my_4way.net.xml")
-    ROUTE_FILE = os.path.join(os.getcwd(), "my_4way.rou.xml")
-    SUMOCFG_FILE = os.path.join(os.getcwd(), "my_4way.sumocfg")
+    NET_FILE = os.path.join(os.getcwd(), "sumo_simulation_net/4way/my_4way.net.xml")
+    ROUTE_FILE = os.path.join(os.getcwd(), "sumo_simulation_net/4way/my_4way.rou.xml")
+    SUMOCFG_FILE = os.path.join(os.getcwd(), "sumo_simulation_net/4way/my_4way.sumocfg")
     SIM_STEP = 1.0
     MAX_STEPS = 600
     MAX_VEHICLES = 200

@@ -27,6 +27,7 @@ this project implements a deep q-network (DQN)-based agent for adaptive traffic 
       cmake .
       make -j$(nproc)
       export SUMO_HOME=$(pwd)/sumo_home
+      export PATH=$SUMO_HOME/bin:$PATH # If you don't want to install SUMO on your machine, build it and add the repository to your PATH.
       ```
 
    2. **Using Your Own SUMO Installation**
@@ -160,6 +161,7 @@ Set up your environment variables:
 ```bash
 export SUMO_HOME=/path/to/sumo  # Replace with your actual SUMO installation path or builded repo !
 export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
+export PATH=$SUMO_HOME/bin:$PATH .
 ```
 
 - Generate random trips:
@@ -168,7 +170,7 @@ export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
   python $SUMO_HOME/tools/randomTrips.py -n your_network.net.xml -r your_routes.rou.xml -e 100 --period 10 --seed 42
 ```
 
-- use sumo-gui to visualize your network.
+- use **sumo-gui** to visualize your network.
   -To add vehicles:
   Write a test script or use available libraries.
 
@@ -182,3 +184,4 @@ export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
       .Environment settings
 
 this will save you a lot of time and effort later on!
+After creating your simulation, make sure to update the **config.py** file so the model works with your network

@@ -47,6 +47,8 @@ this project implements a deep q-network (DQN)-based agent for adaptive traffic 
   Submodule: DQN agent implementation
 - sumo_home/
   Submodule: SUMO (optional if you use system SUMO)
+- sumo_simulation_net/
+  where sumo simulations located
 - sumo_env.py
   SUMO environment wrapper (Gym-like API: initialize_simulation, take_action, close).
 - train.py

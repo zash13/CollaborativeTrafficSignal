@@ -9,13 +9,11 @@ from DQN.DQN_Agent import (
 )
 import os
 import sys
-from sumo_env import SumoEnv  # Import after Config definition
+from sumo_env import SumoEnv
 from config import Config
 
-EPOCHES = 1
 
-
-def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS):
+def train_dqn(env, num_episodes, max_steps_per_episode=Config.MAX_STEPS):
     action_size = len(env.phases[env.tls_ids[0]])
     obs_dim = env.obs_dim
     epsilon_min = 0.1
@@ -76,10 +74,10 @@ def train_dqn(env, num_episodes=EPOCHES, max_steps_per_episode=Config.MAX_STEPS)
     plt.plot(rewards)
     plt.xlabel("Episode")
     plt.ylabel("Total Reward")
-    plt.title("DQN Training on 4-Way SUMO Intersection")
+    plt.title("DQN Training on SUMO Intersection")
     plt.show()
-    os.makedirs("checkpoints/v1", exist_ok=True)
-    agent.save("checkpoints/v1/model.keras")
+    os.makedirs(os.path.dirname(Config.MODEL_SAVE_PATH), exist_ok=True)
+    agent.save(Config.MODEL_SAVE_PATH)
     return rewards
 
 
@@ -88,5 +86,5 @@ if __name__ == "__main__":
         print(f"[ERROR] Net file not found: {Config.NET_FILE}")
         sys.exit(1)
     env = SumoEnv(Config)
-    rewards = train_dqn(env, num_episodes=EPOCHES)
+    rewards = train_dqn(env, num_episodes=Config.EPOCHES)
     print("[INFO] Training complete.")

@@ -6,7 +6,7 @@ from DQN.DQN_Agent import AgentFactory, AgentType
 from sumo_env import SumoEnv
 from config import Config
 
-CHECKPOINT_BASE = "checkpoints/v2/model"
+CHECKPOINT_BASE = "checkpoints/v1/model.keras"
 
 
 def run_prediction(env, num_episodes=1, max_steps_per_episode=Config.MAX_STEPS):
